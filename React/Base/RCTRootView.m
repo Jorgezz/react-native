@@ -29,6 +29,7 @@
 #import "UIView+React.h"
 
 NSString *const RCTContentDidAppearNotification = @"RCTContentDidAppearNotification";
+NSTimeInterval t1_rn_launch_cost = 0;
 
 @interface RCTUIManager (RCTRootView)
 

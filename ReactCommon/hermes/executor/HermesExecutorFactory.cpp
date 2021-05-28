@@ -20,6 +20,7 @@
 #endif
 
 #include "JSITracing.h"
+#include <base/MiniTrace.h>
 
 using namespace facebook::hermes;
 using namespace facebook::jsi;
@@ -32,6 +33,7 @@ namespace {
 std::unique_ptr<HermesRuntime> makeHermesRuntimeSystraced(
     const ::hermes::vm::RuntimeConfig &runtimeConfig) {
   SystraceSection s("HermesExecutorFactory::makeHermesRuntimeSystraced");
+    MTR_SCOPE("Main", "HermesExecutorFactory::makeHermesRuntimeSystraced");
   return hermes::makeHermesRuntime(runtimeConfig);
 }
 
@@ -193,6 +195,7 @@ class DecoratedRuntime : public jsi::WithRuntimeDecorator<ReentrancyCheck> {
 std::unique_ptr<JSExecutor> HermesExecutorFactory::createJSExecutor(
     std::shared_ptr<ExecutorDelegate> delegate,
     std::shared_ptr<MessageQueueThread> jsQueue) {
+    MTR_SCOPE("Main", "HermesExecutorFactory::createJSExecutor");
   std::unique_ptr<HermesRuntime> hermesRuntime =
       makeHermesRuntimeSystraced(runtimeConfig_);
   HermesRuntime &hermesRuntimeRef = *hermesRuntime;

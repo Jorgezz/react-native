@@ -14,6 +14,7 @@
 #import "RCTTouchHandler.h"
 #import "RCTUIManager.h"
 #import "UIView+React.h"
+#import <React/RCTTraceManager.h>
 
 @implementation RCTRootContentView
 
@@ -46,12 +47,15 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithCoder : (nonnull NSCoder *)aDecoder)
 {
   [super insertReactSubview:subview atIndex:atIndex];
   [_bridge.performanceLogger markStopForTag:RCTPLTTI];
+  [RCTTraceManager.sharedManager begin:@"RCTRootContentView::RCTContentDidAppearNotification"];
   dispatch_async(dispatch_get_main_queue(), ^{
     if (!self->_contentHasAppeared) {
       self->_contentHasAppeared = YES;
       [[NSNotificationCenter defaultCenter] postNotificationName:RCTContentDidAppearNotification object:self.superview];
     }
   });
+  [RCTTraceManager.sharedManager end:@"RCTRootContentView::RCTContentDidAppearNotification"];
+  NSLog(@"t1 cost: %f", [[NSDate date] timeIntervalSince1970] - t1_rn_launch_cost);
 }
 
 - (void)setSizeFlexibility:(RCTRootViewSizeFlexibility)sizeFlexibility

@@ -13,6 +13,8 @@
 #include <ReactCommon/LongLivedObject.h>
 #include <cxxreact/SystraceSection.h>
 
+#include <base/MiniTrace.h>
+
 using namespace facebook;
 
 namespace facebook {
@@ -54,7 +56,9 @@ std::shared_ptr<TurboModule> TurboModuleBinding::getModule(
   std::shared_ptr<TurboModule> module = nullptr;
   {
     SystraceSection s("TurboModuleBinding::getModule", "module", name);
+      MTR_BEGIN("Main", ("NativeToJsBridge::invokeCallback module:" + name).c_str());
     module = moduleProvider_(name);
+      MTR_END("Main", ("NativeToJsBridge::invokeCallback module:" + name).c_str());
   }
   return module;
 }

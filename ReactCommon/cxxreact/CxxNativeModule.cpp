@@ -15,6 +15,7 @@
 #include "JsArgumentHelpers.h"
 #include "MessageQueueThread.h"
 #include "SystraceSection.h"
+#include <base/MiniTrace.h>
 
 using facebook::xplat::module::CxxModule;
 namespace facebook {
@@ -169,6 +170,7 @@ void CxxNativeModule::invoke(
         (void)(callId);
 #endif
         SystraceSection s(method.name.c_str());
+//      MTR_SCOPE("Main", ("CxxNativeModule::invoke" + method.name).c_str());
         try {
           method.func(std::move(params), first, second);
         } catch (const facebook::xplat::JsArgumentException &ex) {

@@ -16,6 +16,8 @@
 
 #include <string>
 
+#include <base/MiniTrace.h>
+
 using namespace facebook::jsi;
 
 namespace facebook {
@@ -70,6 +72,7 @@ folly::Optional<Object> JSINativeModules::createModule(
     const std::string &name) {
   bool hasLogger(ReactMarker::logTaggedMarker);
   if (hasLogger) {
+      MTR_SCOPE("Main", "NATIVE_MODULE_SETUP_START");
     ReactMarker::logTaggedMarker(
         ReactMarker::NATIVE_MODULE_SETUP_START, name.c_str());
   }
@@ -96,6 +99,7 @@ folly::Optional<Object> JSINativeModules::createModule(
       moduleInfo.asObject(rt).getPropertyAsObject(rt, "module"));
 
   if (hasLogger) {
+      MTR_SCOPE("Main", "NATIVE_MODULE_SETUP_STOP");
     ReactMarker::logTaggedMarker(
         ReactMarker::NATIVE_MODULE_SETUP_STOP, name.c_str());
   }

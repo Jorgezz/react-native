@@ -13,6 +13,8 @@
 #include "NativeModule.h"
 #include "SystraceSection.h"
 
+#include <base/MiniTrace.h>
+
 namespace facebook {
 namespace react {
 
@@ -48,6 +50,8 @@ void ModuleRegistry::updateModuleNamesFromIndex(size_t index) {
 void ModuleRegistry::registerModules(
     std::vector<std::unique_ptr<NativeModule>> modules) {
   SystraceSection s_("ModuleRegistry::registerModules");
+    MTR_SCOPE("Main", "ModuleRegistry::registerModules");
+
   // Noop if there are no NativeModules to add
   if (modules.empty()) {
     return;
@@ -83,6 +87,7 @@ void ModuleRegistry::registerModules(
 
 std::vector<std::string> ModuleRegistry::moduleNames() {
   SystraceSection s_("ModuleRegistry::moduleNames");
+    MTR_SCOPE("Main", "ModuleRegistry::moduleNames");
   std::vector<std::string> names;
   for (size_t i = 0; i < modules_.size(); i++) {
     std::string name = normalizeName(modules_[i]->getName());
@@ -95,6 +100,8 @@ std::vector<std::string> ModuleRegistry::moduleNames() {
 folly::Optional<ModuleConfig> ModuleRegistry::getConfig(
     const std::string &name) {
   SystraceSection s("ModuleRegistry::getConfig", "module", name);
+    std::string getConfigModuleName = ("ModuleRegistry::getConfig module:" + name);
+//    MTR_SCOPE("Main", getConfigModuleName.c_str());
 
   // Initialize modulesByName_
   if (modulesByName_.empty() && !modules_.empty()) {
@@ -153,11 +160,15 @@ folly::Optional<ModuleConfig> ModuleRegistry::getConfig(
      * event. The Module will be initialized when we invoke one of its
      * NativeModule methods.
      */
+      std::string getConstantsModuleName = ("ModuleRegistry::getConstants module:" + name);
+//      MTR_SCOPE("Main", getConstantsModuleName.c_str());
     config.push_back(module->getConstants());
   }
 
   {
     SystraceSection s_("ModuleRegistry::getMethods", "module", name);
+      std::string getMethodsModuleName = ("ModuleRegistry::getMethods module:" + name);
+//      MTR_SCOPE("Main", getMethodsModuleName.c_str());
     std::vector<MethodDescriptor> methods = module->getMethods();
 
     folly::dynamic methodNames = folly::dynamic::array;
@@ -194,6 +205,9 @@ folly::Optional<ModuleConfig> ModuleRegistry::getConfig(
 }
 
 std::string ModuleRegistry::getModuleName(unsigned int moduleId) {
+    std::string getModuleNameById = ("ModuleRegistry::getModuleName:" + std::to_string(moduleId));
+//    MTR_SCOPE("Main", getModuleNameById.c_str());
+
   if (moduleId >= modules_.size()) {
     throw std::runtime_error(folly::to<std::string>(
         "moduleId ", moduleId, " out of range [0..", modules_.size(), ")"));
@@ -205,6 +219,8 @@ std::string ModuleRegistry::getModuleName(unsigned int moduleId) {
 std::string ModuleRegistry::getModuleSyncMethodName(
     unsigned int moduleId,
     unsigned int methodId) {
+    std::string getModuleSyncMethodName = ("ModuleRegistry::getModuleSyncMethodName:" + std::to_string(moduleId) + "method:" + std::to_string(methodId));
+//    MTR_SCOPE("Main", getModuleSyncMethodName.c_str());
   if (moduleId >= modules_.size()) {
     throw std::runtime_error(folly::to<std::string>(
         "moduleId ", moduleId, " out of range [0..", modules_.size(), ")"));
@@ -218,6 +234,8 @@ void ModuleRegistry::callNativeMethod(
     unsigned int methodId,
     folly::dynamic &&params,
     int callId) {
+    std::string callNativeMethod = ("ModuleRegistry::callNativeMethod:" + std::to_string(moduleId) + "method:" + std::to_string(methodId));
+//    MTR_SCOPE("Main", callNativeMethod.c_str());
   if (moduleId >= modules_.size()) {
     throw std::runtime_error(folly::to<std::string>(
         "moduleId ", moduleId, " out of range [0..", modules_.size(), ")"));
@@ -229,6 +247,8 @@ MethodCallResult ModuleRegistry::callSerializableNativeHook(
     unsigned int moduleId,
     unsigned int methodId,
     folly::dynamic &&params) {
+    std::string callSerializableNativeHook = ("ModuleRegistry::callSerializableNativeHook:" + std::to_string(moduleId) + "method:" + std::to_string(methodId));
+//    MTR_SCOPE("Main", callSerializableNativeHook.c_str());
   if (moduleId >= modules_.size()) {
     throw std::runtime_error(folly::to<std::string>(
         "moduleId ", moduleId, "out of range [0..", modules_.size(), ")"));

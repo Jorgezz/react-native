@@ -6,12 +6,13 @@
  */
 
 #import <UIKit/UIKit.h>
-
-@class RCTBridge;
+#import "KRNHomeViewController.h"
+//@class RCTBridge;
 
 @interface AppDelegate : UIResponder <UIApplicationDelegate>
 
 @property (nonatomic, strong) UIWindow *window;
 @property (nonatomic, readonly) RCTBridge *bridge;
+@property (nonatomic, strong) KRNHomeViewController *rootVC;
 
 @end

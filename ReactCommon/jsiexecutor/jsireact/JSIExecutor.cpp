@@ -21,6 +21,8 @@
 
 #include <sstream>
 #include <stdexcept>
+#include <base/MiniTrace.h>
+#include <sys/time.h>
 
 using namespace facebook::jsi;
 
@@ -76,12 +78,15 @@ JSIExecutor::JSIExecutor(
       moduleRegistry_(delegate ? delegate->getModuleRegistry() : nullptr),
       scopedTimeoutInvoker_(scopedTimeoutInvoker),
       runtimeInstaller_(runtimeInstaller) {
+          MTR_SCOPE("Main", "JSIExecutor::JSIExecutor");
   runtime_->global().setProperty(
       *runtime, "__jsiExecutorDescription", runtime->description());
 }
 
 void JSIExecutor::initializeRuntime() {
   SystraceSection s("JSIExecutor::initializeRuntime");
+    MTR_SCOPE("Main", "JSIExecutor::initializeRuntime");
+
   runtime_->global().setProperty(
       *runtime_,
       "nativeModuleProxy",
@@ -149,23 +154,32 @@ void JSIExecutor::loadBundle(
     std::unique_ptr<const JSBigString> script,
     std::string sourceURL) {
   SystraceSection s("JSIExecutor::loadBundle");
-
+    MTR_SCOPE("Main", "JSIExecutor::loadBundle");
   bool hasLogger(ReactMarker::logTaggedMarker);
   std::string scriptName = simpleBasename(sourceURL);
   if (hasLogger) {
+      MTR_SCOPE("Main", "RUN_JS_BUNDLE_START");
     ReactMarker::logTaggedMarker(
         ReactMarker::RUN_JS_BUNDLE_START, scriptName.c_str());
   }
-  runtime_->evaluateJavaScript(
-      std::make_unique<BigStringBuffer>(std::move(script)), sourceURL);
-  flush();
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    printf("time between bridge create and run bundle js: %f s", (tv.tv_sec*1000000.0 + tv.tv_usec - between_bridge_create_and_run_bundle_js)/1000000);
+    printf("\n");
+    MTR_BEGIN("Main", "RUN_JS_BUNDLE");
+    
+    runtime_->evaluateJavaScript(std::make_unique<BigStringBuffer>(std::move(script)), sourceURL);
+    flush();
+    MTR_END("Main", "RUN_JS_BUNDLE");
   if (hasLogger) {
+      MTR_SCOPE("Main", "RUN_JS_BUNDLE_STOP");
     ReactMarker::logTaggedMarker(
         ReactMarker::RUN_JS_BUNDLE_STOP, scriptName.c_str());
   }
 }
 
 void JSIExecutor::setBundleRegistry(std::unique_ptr<RAMBundleRegistry> r) {
+    MTR_SCOPE("Main", "JSIExecutor::setBundleRegistry");
   if (!bundleRegistry_) {
     runtime_->global().setProperty(
         *runtime_,
@@ -186,6 +200,7 @@ void JSIExecutor::setBundleRegistry(std::unique_ptr<RAMBundleRegistry> r) {
 void JSIExecutor::registerBundle(
     uint32_t bundleId,
     const std::string &bundlePath) {
+    MTR_SCOPE("Main", "JSIExecutor::registerBundle");
   const auto tag = folly::to<std::string>(bundleId);
   ReactMarker::logTaggedMarker(
       ReactMarker::REGISTER_JS_SEGMENT_START, tag.c_str());
@@ -235,6 +250,8 @@ void JSIExecutor::callFunction(
     const folly::dynamic &arguments) {
   SystraceSection s(
       "JSIExecutor::callFunction", "moduleId", moduleId, "methodId", methodId);
+//    MTR_SCOPE("Main", ("JSIExecutor::callFunction moduleId: "+moduleId+"."+methodId).c_str());
+
   if (!callFunctionReturnFlushedQueue_) {
     bindBridge();
   }
@@ -274,6 +291,7 @@ void JSIExecutor::invokeCallback(
     const double callbackId,
     const folly::dynamic &arguments) {
   SystraceSection s("JSIExecutor::invokeCallback", "callbackId", callbackId);
+    MTR_SCOPE("Main", "JSIExecutor::invokeCallback");
   if (!invokeCallbackAndReturnFlushedQueue_) {
     bindBridge();
   }
@@ -295,6 +313,7 @@ void JSIExecutor::setGlobalVariable(
     std::string propName,
     std::unique_ptr<const JSBigString> jsonValue) {
   SystraceSection s("JSIExecutor::setGlobalVariable", "propName", propName);
+//    MTR_SCOPE("main", ("JSIExecutor::setGlobalVariable propName:" + propName).c_str());
   runtime_->global().setProperty(
       *runtime_,
       propName.c_str(),
@@ -305,18 +324,22 @@ void JSIExecutor::setGlobalVariable(
 }
 
 std::string JSIExecutor::getDescription() {
+    MTR_SCOPE("Main", "JSIExecutor::getDescription");
   return "JSI (" + runtime_->description() + ")";
 }
 
 void *JSIExecutor::getJavaScriptContext() {
+    MTR_SCOPE("Main", "JSIExecutor::getJavaScriptContext");
   return runtime_.get();
 }
 
 bool JSIExecutor::isInspectable() {
+    MTR_SCOPE("Main", "JSIExecutor::isInspectable");
   return runtime_->isInspectable();
 }
 
 void JSIExecutor::handleMemoryPressure(int pressureLevel) {
+    MTR_SCOPE("Main", "JSIExecutor::handleMemoryPressure");
   // The level is an enum value passed by the Android OS to an onTrimMemory
   // event callback. Defined in ComponentCallbacks2.
   enum AndroidMemoryPressure {
@@ -387,12 +410,23 @@ void JSIExecutor::handleMemoryPressure(int pressureLevel) {
 void JSIExecutor::bindBridge() {
   std::call_once(bindFlag_, [this] {
     SystraceSection s("JSIExecutor::bindBridge (once)");
+      MTR_SCOPE("main", "JSIExecutor::bindBridge (once)");
     Value batchedBridgeValue =
         runtime_->global().getProperty(*runtime_, "__fbBatchedBridge");
-    if (batchedBridgeValue.isUndefined() || !batchedBridgeValue.isObject()) {
-      throw JSINativeException(
-          "Could not get BatchedBridge, make sure your bundle is packaged correctly");
-    }
+      if (batchedBridgeValue.isUndefined()) {
+        throw JSINativeException(
+            "Could not get BatchedBridge, make sure your bundle is packaged correctly");
+      }
+      if (!batchedBridgeValue.isObject()) {
+        throw JSINativeException(
+            "Could not get BatchedBridge, make sure your bundle is packaged correctly");
+      }
+
+      
+//    if (batchedBridgeValue.isUndefined() || !batchedBridgeValue.isObject()) {
+//      throw JSINativeException(
+//          "Could not get BatchedBridge, make sure your bundle is packaged correctly");
+//    }
 
     Object batchedBridge = batchedBridgeValue.asObject(*runtime_);
     callFunctionReturnFlushedQueue_ = batchedBridge.getPropertyAsFunction(
@@ -406,6 +440,7 @@ void JSIExecutor::bindBridge() {
 
 void JSIExecutor::callNativeModules(const Value &queue, bool isEndOfBatch) {
   SystraceSection s("JSIExecutor::callNativeModules");
+    MTR_SCOPE("main", "JSIExecutor::callNativeModules");
   // If this fails, you need to pass a fully functional delegate with a
   // module registry to the factory/ctor.
   CHECK(delegate_) << "Attempting to use native modules without a delegate";
@@ -422,6 +457,7 @@ void JSIExecutor::callNativeModules(const Value &queue, bool isEndOfBatch) {
 
 void JSIExecutor::flush() {
   SystraceSection s("JSIExecutor::flush");
+    MTR_SCOPE("main", "JSIExecutor::flush");
   if (flushedQueue_) {
     Value ret = flushedQueue_->call(*runtime_);
     performMicrotaskCheckpoint(*runtime_);
@@ -454,6 +490,7 @@ void JSIExecutor::flush() {
 }
 
 Value JSIExecutor::nativeRequire(const Value *args, size_t count) {
+    MTR_SCOPE("Main", "JSIExecutor::nativeRequire");
   if (count > 2 || count == 0) {
     throw std::invalid_argument("Got wrong number of args");
   }
@@ -468,6 +505,7 @@ Value JSIExecutor::nativeRequire(const Value *args, size_t count) {
 }
 
 Value JSIExecutor::nativeCallSyncHook(const Value *args, size_t count) {
+    MTR_SCOPE("Main", "JSIExecutor::nativeCallSyncHook");
   if (count != 3) {
     throw std::invalid_argument("nativeCallSyncHook arg count must be 3");
   }

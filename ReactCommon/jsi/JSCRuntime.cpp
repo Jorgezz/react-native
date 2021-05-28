@@ -17,6 +17,7 @@
 #include <queue>
 #include <sstream>
 #include <thread>
+#include <base/MiniTrace.h>
 
 namespace facebook {
 namespace jsc {
@@ -417,6 +418,8 @@ jsi::Value JSCRuntime::evaluatePreparedJavaScript(
 jsi::Value JSCRuntime::evaluateJavaScript(
     const std::shared_ptr<const jsi::Buffer> &buffer,
     const std::string &sourceURL) {
+    MTR_SCOPE("Main", "JSCRuntime::evaluateJavaScript");
+
   std::string tmp(
       reinterpret_cast<const char *>(buffer->data()), buffer->size());
   JSStringRef sourceRef = JSStringCreateWithUTF8CString(tmp.c_str());

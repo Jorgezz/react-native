@@ -66,6 +66,8 @@
 #import <React/RCTDevLoadingViewProtocol.h>
 #endif
 
+#include <React/RCTTraceManager.h>
+
 static NSString *const RCTJSThreadName = @"com.facebook.react.JavaScript";
 
 typedef void (^RCTPendingCall)();
@@ -306,6 +308,9 @@ struct RCTInstanceCallback : public InstanceCallback {
 + (void)runRunLoop
 {
   @autoreleasepool {
+      [RCTTraceManager.sharedManager setThreadName:RCTJSThreadName];
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::runJSRunLoop::setup"];
+
     RCT_PROFILE_BEGIN_EVENT(RCTProfileTagAlways, @"-[RCTCxxBridge runJSRunLoop] setup", nil);
 
     // copy thread name to pthread name
@@ -318,6 +323,7 @@ struct RCTInstanceCallback : public InstanceCallback {
     CFRelease(noSpinSource);
 
     RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::runJSRunLoop::setup"];
 
     // run the run loop
     while (kCFRunLoopRunStopped !=
@@ -381,29 +387,48 @@ struct RCTInstanceCallback : public InstanceCallback {
 {
   RCT_PROFILE_BEGIN_EVENT(RCTProfileTagAlways, @"-[RCTCxxBridge start]", nil);
 
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start"];
+
   [[NSNotificationCenter defaultCenter] postNotificationName:RCTJavaScriptWillStartLoadingNotification
                                                       object:_parentBridge
                                                     userInfo:@{@"bridge" : self}];
 
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::_jsThread::Create"];
   // Set up the JS thread early
   _jsThread = [[NSThread alloc] initWithTarget:[self class] selector:@selector(runRunLoop) object:nil];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::_jsThread::Create"];
+
   _jsThread.name = RCTJSThreadName;
   _jsThread.qualityOfService = NSOperationQualityOfServiceUserInteractive;
 #if RCT_DEBUG
   _jsThread.stackSize *= 2;
 #endif
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::_jsThread::Start"];
   [_jsThread start];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::_jsThread::Start"];
 
   dispatch_group_t prepareBridge = dispatch_group_create();
-
+    
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::markStartForTag"];
   [_performanceLogger markStartForTag:RCTPLNativeModuleInit];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::markStartForTag"];
 
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::registerExtraModules"];
   [self registerExtraModules];
-  // Initialize all native modules that cannot be loaded lazily
-  (void)[self _initializeModules:RCTGetModuleClasses() withDispatchGroup:prepareBridge lazilyDiscovered:NO];
-  [self registerExtraLazyModules];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::registerExtraModules"];
 
+  // Initialize all native modules that cannot be loaded lazily
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::_initializeModules"];
+  (void)[self _initializeModules:RCTGetModuleClasses() withDispatchGroup:prepareBridge lazilyDiscovered:NO];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::_initializeModules"];
+
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::registerExtraLazyModules"];
+  [self registerExtraLazyModules];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::registerExtraLazyModules"];
+    
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::markStopForTag"];
   [_performanceLogger markStopForTag:RCTPLNativeModuleInit];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::markStopForTag"];
 
   // This doesn't really do anything.  The real work happens in initializeBridge.
   _reactInstance.reset(new Instance);
@@ -411,11 +436,14 @@ struct RCTInstanceCallback : public InstanceCallback {
   __weak RCTCxxBridge *weakSelf = self;
 
   // Prepare executor factory (shared_ptr for copy into block)
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::executorFactory"];
   std::shared_ptr<JSExecutorFactory> executorFactory;
   if (!self.executorClass) {
     if ([self.delegate conformsToProtocol:@protocol(RCTCxxBridgeDelegate)]) {
+        [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::jsExecutorFactoryForBridge"];
       id<RCTCxxBridgeDelegate> cxxDelegate = (id<RCTCxxBridgeDelegate>)self.delegate;
       executorFactory = [cxxDelegate jsExecutorFactoryForBridge:self];
+        [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::jsExecutorFactoryForBridge"];
     }
     if (!executorFactory) {
       auto installBindings = RCTJSIExecutorRuntimeInstaller(nullptr);
@@ -433,12 +461,14 @@ struct RCTInstanceCallback : public InstanceCallback {
       }
     }));
   }
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::executorFactory"];
 
   /**
    * id<RCTCxxBridgeDelegate> jsExecutorFactory may create and assign an id<RCTTurboModuleRegistry> object to
    * RCTCxxBridge If id<RCTTurboModuleRegistry> is assigned by this time, eagerly initialize all TurboModules
    */
   if (_turboModuleRegistry && RCTTurboModuleEagerInitEnabled()) {
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::RCTTurboModuleEagerInitEnabled"];
     for (NSString *moduleName in [_turboModuleRegistry eagerInitModuleNames]) {
       [_turboModuleRegistry moduleForName:[moduleName UTF8String]];
     }
@@ -453,44 +483,64 @@ struct RCTInstanceCallback : public InstanceCallback {
         });
       }
     }
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::RCTTurboModuleEagerInitEnabled"];
   }
-
+    
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::ensureOnJavaScriptThread::start"];
   // Dispatch the instance initialization as soon as the initial module metadata has
   // been collected (see initModules)
   dispatch_group_enter(prepareBridge);
   [self ensureOnJavaScriptThread:^{
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::_initializeBridge"];
     [weakSelf _initializeBridge:executorFactory];
     dispatch_group_leave(prepareBridge);
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::_initializeBridge"];
   }];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::ensureOnJavaScriptThread::start"];
 
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::loadSource::start"];
   // Load the source asynchronously, then store it for later execution.
   dispatch_group_enter(prepareBridge);
   __block NSData *sourceCode;
-  [self
-      loadSource:^(NSError *error, RCTSource *source) {
+  [self loadSource:^(NSError *error, RCTSource *source) {
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::loadSource::end"];
         if (error) {
           [weakSelf handleError:error];
         }
 
         sourceCode = source.data;
         dispatch_group_leave(prepareBridge);
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::loadSource::end"];
+
       }
       onProgress:^(RCTLoadingProgress *progressData) {
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::loadSource::Loading"];
+
 #if (RCT_DEV | RCT_ENABLE_LOADING_VIEW) && __has_include(<React/RCTDevLoadingViewProtocol.h>)
         id<RCTDevLoadingViewProtocol> loadingView = [weakSelf moduleForName:@"DevLoadingView"
                                                       lazilyLoadIfNecessary:YES];
         [loadingView updateProgress:progressData];
 #endif
-      }];
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::loadSource::Loading"];
 
+      }];
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::loadSource::start"];
+    
   // Wait for both the modules and source code to have finished loading
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::executeSourceCode::start"];
   dispatch_group_notify(prepareBridge, dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+      [RCTTraceManager.sharedManager setThreadName:@"QOS_CLASS_USER_INTERACTIVE"];
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::start::executeSourceCode::end"];
     RCTCxxBridge *strongSelf = weakSelf;
     if (sourceCode && strongSelf.loading) {
       [strongSelf executeSourceCode:sourceCode sync:NO];
     }
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::executeSourceCode::end"];
   });
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start::executeSourceCode::start"];
+
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::start"];
 }
 
 - (void)loadSource:(RCTSourceLoadBlock)_onSourceLoad onProgress:(RCTSourceLoadProgressBlock)onProgress
@@ -643,6 +693,7 @@ struct RCTInstanceCallback : public InstanceCallback {
   }
 
   [_performanceLogger markStartForTag:RCTPLNativeModulePrepareConfig];
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::buildModuleRegistry"];
   RCT_PROFILE_BEGIN_EVENT(RCTProfileTagAlways, @"-[RCTCxxBridge buildModuleRegistry]", nil);
 
   __weak __typeof(self) weakSelf = self;
@@ -657,7 +708,7 @@ struct RCTInstanceCallback : public InstanceCallback {
 
   [_performanceLogger markStopForTag:RCTPLNativeModulePrepareConfig];
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
-
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::buildModuleRegistry"];
   return registry;
 }
 
@@ -673,6 +724,7 @@ struct RCTInstanceCallback : public InstanceCallback {
       [weakSelf handleError:error];
     }
   });
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::_initializeBridgeLocked"];
 
   RCT_PROFILE_BEGIN_EVENT(RCTProfileTagAlways, @"-[RCTCxxBridge initializeBridge:]", nil);
   // This can only be false if the bridge was invalidated before startup completed
@@ -691,10 +743,13 @@ struct RCTInstanceCallback : public InstanceCallback {
   }
 
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::_initializeBridgeLocked"];
+
 }
 
 - (void)_initializeBridgeLocked:(std::shared_ptr<JSExecutorFactory>)executorFactory
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::_initializeBridgeLocked"];
   std::lock_guard<std::mutex> guard(_moduleRegistryLock);
 
   // This is async, but any calls into JS are blocked by the m_syncReady CV in Instance
@@ -704,10 +759,12 @@ struct RCTInstanceCallback : public InstanceCallback {
       _jsMessageThread,
       [self _buildModuleRegistryUnlocked]);
   _moduleRegistryCreated = YES;
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::_initializeBridgeLocked"];
 }
 
 - (void)updateModuleWithInstance:(id<RCTBridgeModule>)instance
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::updateModuleWithInstance"];
   NSString *const moduleName = RCTBridgeModuleNameForClass([instance class]);
   if (moduleName) {
     RCTModuleData *const moduleData = _moduleDataByName[moduleName];
@@ -715,6 +772,7 @@ struct RCTInstanceCallback : public InstanceCallback {
       moduleData.instance = instance;
     }
   }
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::updateModuleWithInstance"];
 }
 
 - (NSArray<RCTModuleData *> *)registerModulesForClasses:(NSArray<Class> *)moduleClasses
@@ -725,6 +783,7 @@ struct RCTInstanceCallback : public InstanceCallback {
 - (NSArray<RCTModuleData *> *)_registerModulesForClasses:(NSArray<Class> *)moduleClasses
                                         lazilyDiscovered:(BOOL)lazilyDiscovered
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::initModulesWithDispatchGroup::autoexported_moduleData"];
   RCT_PROFILE_BEGIN_EVENT(
       RCTProfileTagAlways, @"-[RCTCxxBridge initModulesWithDispatchGroup:] autoexported moduleData", nil);
 
@@ -773,12 +832,14 @@ struct RCTInstanceCallback : public InstanceCallback {
   [_moduleDataByID addObjectsFromArray:moduleDataByID];
 
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::initModulesWithDispatchGroup::autoexported_moduleData"];
 
   return moduleDataByID;
 }
 
 - (void)registerExtraModules
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::initModulesWithDispatchGroup::extraModules"];
   RCT_PROFILE_BEGIN_EVENT(RCTProfileTagAlways, @"-[RCTCxxBridge initModulesWithDispatchGroup:] extraModules", nil);
 
   NSArray<id<RCTBridgeModule>> *appExtraModules = nil;
@@ -798,7 +859,9 @@ struct RCTInstanceCallback : public InstanceCallback {
   }
 
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
-
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::initModulesWithDispatchGroup::extraModules"];
+    
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::initModulesWithDispatchGroup::preinitialized_moduleData"];
   RCT_PROFILE_BEGIN_EVENT(
       RCTProfileTagAlways, @"-[RCTCxxBridge initModulesWithDispatchGroup:] preinitialized moduleData", nil);
   // Set up moduleData for pre-initialized module instances
@@ -846,6 +909,7 @@ struct RCTInstanceCallback : public InstanceCallback {
     [_moduleDataByID addObject:moduleData];
   }
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::initModulesWithDispatchGroup::preinitialized_moduleData"];
 }
 
 - (void)registerExtraLazyModules
@@ -924,6 +988,7 @@ struct RCTInstanceCallback : public InstanceCallback {
     }
 #endif
   } else {
+      [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::initModulesWithDispatchGroup::moduleData.hasInstance"];
     RCT_PROFILE_BEGIN_EVENT(
         RCTProfileTagAlways, @"-[RCTCxxBridge initModulesWithDispatchGroup:] moduleData.hasInstance", nil);
     // Dispatch module init onto main thread for those modules that require it
@@ -942,6 +1007,7 @@ struct RCTInstanceCallback : public InstanceCallback {
       }
     }
     RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+      [RCTTraceManager.sharedManager end:@"RCTCxxBridge::initModulesWithDispatchGroup::moduleData.hasInstance"];
 
     // From this point on, RCTDidInitializeModuleNotification notifications will
     // be sent the first time a module is accessed.
@@ -975,6 +1041,7 @@ struct RCTInstanceCallback : public InstanceCallback {
 
 - (void)_prepareModulesWithDispatchGroup:(dispatch_group_t)dispatchGroup
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::_prepareModulesWithDispatchGroup"];
   RCT_PROFILE_BEGIN_EVENT(0, @"-[RCTCxxBridge _prepareModulesWithDispatchGroup]", nil);
 
   BOOL initializeImmediately = NO;
@@ -998,10 +1065,12 @@ struct RCTInstanceCallback : public InstanceCallback {
       dispatch_block_t block = ^{
         if (self.valid && ![moduleData.moduleClass isSubclassOfClass:[RCTCxxModule class]]) {
           [self->_performanceLogger appendStartForTag:RCTPLNativeModuleMainThread];
+            [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::_prepareModulesWithDispatchGroup::gatherConstants"];
           (void)[moduleData instance];
           if (!RCTIsMainQueueExecutionOfConstantsToExportDisabled()) {
             [moduleData gatherConstants];
           }
+            [RCTTraceManager.sharedManager end:@"RCTCxxBridge::_prepareModulesWithDispatchGroup::gatherConstants"];
           [self->_performanceLogger appendStopForTag:RCTPLNativeModuleMainThread];
         }
       };
@@ -1020,6 +1089,7 @@ struct RCTInstanceCallback : public InstanceCallback {
   }
   [_performanceLogger setValue:_modulesInitializedOnMainQueue forTag:RCTPLNativeModuleMainThreadUsesCount];
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::_prepareModulesWithDispatchGroup"];
 }
 
 - (void)registerModuleForFrameUpdates:(id<RCTBridgeModule>)module withModuleData:(RCTModuleData *)moduleData
@@ -1353,6 +1423,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
 
 - (void)_flushPendingCalls
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::_flushPendingCalls"];
   RCT_PROFILE_BEGIN_EVENT(0, @"Processing pendingCalls", @{@"count" : [@(_pendingCalls.count) stringValue]});
   // Phase B: _flushPendingCalls happens.  Each block in _pendingCalls is
   // executed, adding work to the queue, and _pendingCount is decremented.
@@ -1365,6 +1436,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
   }
   _loading = NO;
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::_flushPendingCalls"];
 }
 
 /**
@@ -1378,7 +1450,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
   if (!self.valid) {
     return;
   }
-
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::enqueueJSCall"];
   /**
    * AnyThread
    */
@@ -1410,6 +1482,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
   }];
 
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::enqueueJSCall"];
 }
 
 /**
@@ -1453,11 +1526,13 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
 
 - (void)enqueueApplicationScript:(NSData *)script url:(NSURL *)url onComplete:(dispatch_block_t)onComplete
 {
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::executeApplicationScript"];
   RCT_PROFILE_BEGIN_EVENT(RCTProfileTagAlways, @"-[RCTCxxBridge enqueueApplicationScript]", nil);
 
   [self executeApplicationScript:script url:url async:YES];
 
   RCT_PROFILE_END_EVENT(RCTProfileTagAlways, @"");
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::executeApplicationScript"];
 
   // Assumes that onComplete can be called when the next block on the JS thread is scheduled
   if (onComplete) {
@@ -1536,6 +1611,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
 {
   // TODO #12592471: batchDidComplete is only used by RCTUIManager,
   // can we eliminate this special case?
+    [RCTTraceManager.sharedManager begin:@"RCTCxxBridge::batchDidComplete"];
   for (RCTModuleData *moduleData in _moduleDataByID) {
     if (moduleData.implementsBatchDidComplete) {
       [self
@@ -1545,6 +1621,7 @@ RCT_NOT_IMPLEMENTED(-(instancetype)initWithBundleURL
                   queue:moduleData.methodQueue];
     }
   }
+    [RCTTraceManager.sharedManager end:@"RCTCxxBridge::batchDidComplete"];
 }
 
 - (void)startProfiling

@@ -9,6 +9,8 @@
 
 #import <React/RCTBridge.h>
 
+extern NSTimeInterval t1_rn_launch_cost;
+
 @protocol RCTRootViewDelegate;
 
 /**

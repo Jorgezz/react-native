@@ -24,6 +24,7 @@
 #include "SystraceSection.h"
 
 #include <memory>
+#include <base/MiniTrace.h>
 
 #ifdef WITH_FBSYSTRACE
 #include <fbsystrace.h>
@@ -55,6 +56,7 @@ class JsToNativeBridge : public react::ExecutorDelegate {
       __unused JSExecutor &executor,
       folly::dynamic &&calls,
       bool isEndOfBatch) override {
+      MTR_SCOPE("Main", "NativeToJsBridge::callNativeModules");
     CHECK(m_registry || calls.empty())
         << "native module calls cannot be completed with no native modules";
     m_batchHadNativeModuleOrTurboModuleCalls =
@@ -89,6 +91,7 @@ class JsToNativeBridge : public react::ExecutorDelegate {
       unsigned int moduleId,
       unsigned int methodId,
       folly::dynamic &&args) override {
+      MTR_SCOPE("Main", "NativeToJsBridge::callSerializableNativeHook");
     return m_registry->callSerializableNativeHook(
         moduleId, methodId, std::move(args));
   }
@@ -124,6 +127,7 @@ NativeToJsBridge::~NativeToJsBridge() {
 }
 
 void NativeToJsBridge::initializeRuntime() {
+    MTR_SCOPE("Main", "NativeToJsBridge::initializeRuntime");
   runOnExecutorQueue(
       [](JSExecutor *executor) mutable { executor->initializeRuntime(); });
 }
@@ -132,6 +136,7 @@ void NativeToJsBridge::loadBundle(
     std::unique_ptr<RAMBundleRegistry> bundleRegistry,
     std::unique_ptr<const JSBigString> startupScript,
     std::string startupScriptSourceURL) {
+    MTR_SCOPE("Main", "NativeToJsBridge::loadBundle");
   runOnExecutorQueue(
       [this,
        bundleRegistryWrap = folly::makeMoveWrapper(std::move(bundleRegistry)),
@@ -156,6 +161,7 @@ void NativeToJsBridge::loadBundleSync(
     std::unique_ptr<RAMBundleRegistry> bundleRegistry,
     std::unique_ptr<const JSBigString> startupScript,
     std::string startupScriptSourceURL) {
+    MTR_SCOPE("Main", "NativeToJsBridge::loadBundleSync");
   if (bundleRegistry) {
     m_executor->setBundleRegistry(std::move(bundleRegistry));
   }
@@ -178,7 +184,6 @@ void NativeToJsBridge::callFunction(
   FbSystraceAsyncFlow::begin(
       TRACE_TAG_REACT_CXX_BRIDGE, "JSCall", systraceCookie);
 #endif
-
   runOnExecutorQueue([this,
                       module = std::move(module),
                       method = std::move(method),
@@ -192,6 +197,7 @@ void NativeToJsBridge::callFunction(
           "Attempting to call JS function on a bad application bundle: " +
           module + "." + method + "()");
     }
+      MTR_BEGIN("Main", ("NativeToJsBridge::callFunction module:" + module + "." + method).c_str());
 
 #ifdef WITH_FBSYSTRACE
     FbSystraceAsyncFlow::end(
@@ -205,6 +211,7 @@ void NativeToJsBridge::callFunction(
     // destruct until after it's been unregistered (which we check above) and
     // that will happen on this thread
     executor->callFunction(module, method, arguments);
+      MTR_END("Main", ("NativeToJsBridge::callFunction module:" + module + "." + method).c_str());
   });
 }
 
@@ -242,6 +249,7 @@ void NativeToJsBridge::invokeCallback(
 void NativeToJsBridge::registerBundle(
     uint32_t bundleId,
     const std::string &bundlePath) {
+    MTR_SCOPE("Main", "NativeToJsBridge::registerBundle");
   runOnExecutorQueue([bundleId, bundlePath](JSExecutor *executor) {
     executor->registerBundle(bundleId, bundlePath);
   });
@@ -250,6 +258,7 @@ void NativeToJsBridge::registerBundle(
 void NativeToJsBridge::setGlobalVariable(
     std::string propName,
     std::unique_ptr<const JSBigString> jsonValue) {
+    MTR_SCOPE("Main", "NativeToJsBridge::setGlobalVariable");
   runOnExecutorQueue([propName = std::move(propName),
                       jsonValue = folly::makeMoveWrapper(std::move(jsonValue))](
                          JSExecutor *executor) mutable {
@@ -291,6 +300,7 @@ void NativeToJsBridge::destroy() {
 
 void NativeToJsBridge::runOnExecutorQueue(
     std::function<void(JSExecutor *)> task) {
+    MTR_SCOPE("Main", "NativeToJsBridge::runOnExecutorQueue");
   if (*m_destroyed) {
     return;
   }

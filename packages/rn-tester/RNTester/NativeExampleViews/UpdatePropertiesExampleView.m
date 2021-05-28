@@ -42,7 +42,7 @@ RCT_EXPORT_MODULE();
 
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
 
-    _rootView = [[RCTRootView alloc] initWithBridge:appDelegate.bridge
+    _rootView = [[RCTRootView alloc] initWithBridge:appDelegate.rootVC.bridge
                                          moduleName:@"SetPropertiesExampleApp"
                                   initialProperties:@{@"color":@"beige"}];
 

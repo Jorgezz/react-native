@@ -13,6 +13,7 @@
 #import <React/RCTViewManager.h>
 
 #import "AppDelegate.h"
+#import "KRNHomeViewController.h"
 
 @interface FlexibleSizeExampleViewManager : RCTViewManager
 
@@ -49,7 +50,7 @@ RCT_EXPORT_MODULE();
 
     AppDelegate *appDelegate = (AppDelegate *)[[UIApplication sharedApplication] delegate];
 
-    _resizableRootView = [[RCTRootView alloc] initWithBridge:appDelegate.bridge
+    _resizableRootView = [[RCTRootView alloc] initWithBridge:appDelegate.rootVC.bridge
                                                   moduleName:@"RootViewSizeFlexibilityExampleApp"
                                            initialProperties:@{}];
 

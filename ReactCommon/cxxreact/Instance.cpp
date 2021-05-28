@@ -30,6 +30,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <base/MiniTrace.h>
 
 namespace facebook {
 namespace react {
@@ -74,6 +75,7 @@ void Instance::loadBundle(
     std::string sourceURL) {
   callback_->incrementPendingJSCalls();
   SystraceSection s("Instance::loadBundle", "sourceURL", sourceURL);
+    MTR_SCOPE("Main", "Instance::loadApplication");
   nativeToJsBridge_->loadBundle(
       std::move(bundleRegistry), std::move(string), std::move(sourceURL));
 }
@@ -86,6 +88,7 @@ void Instance::loadBundleSync(
   m_syncCV.wait(lock, [this] { return m_syncReady; });
 
   SystraceSection s("Instance::loadBundleSync", "sourceURL", sourceURL);
+    MTR_SCOPE("Main", "Instance::loadApplicationSync");
   nativeToJsBridge_->loadBundleSync(
       std::move(bundleRegistry), std::move(string), std::move(sourceURL));
 }
@@ -93,7 +96,7 @@ void Instance::loadBundleSync(
 void Instance::setSourceURL(std::string sourceURL) {
   callback_->incrementPendingJSCalls();
   SystraceSection s("Instance::setSourceURL", "sourceURL", sourceURL);
-
+    MTR_SCOPE("Main", "Instance::setSourceURL");
   nativeToJsBridge_->loadBundle(nullptr, nullptr, std::move(sourceURL));
 }
 
@@ -102,6 +105,12 @@ void Instance::loadScriptFromString(
     std::string sourceURL,
     bool loadSynchronously) {
   SystraceSection s("Instance::loadScriptFromString", "sourceURL", sourceURL);
+    if (isHBCBundle(sourceURL.c_str())) {
+        printf("sourceURL: %s, is a hbc bundle.", sourceURL.c_str());
+    } else {
+        printf("sourceURL: %s, is not a hbc bundle.", sourceURL.c_str());
+    }
+    MTR_SCOPE("Main", "Instance::loadScriptFromString");
   if (loadSynchronously) {
     loadBundleSync(nullptr, std::move(string), std::move(sourceURL));
   } else {
@@ -216,6 +225,7 @@ void Instance::callJSFunction(
 
 void Instance::callJSCallback(uint64_t callbackId, folly::dynamic &&params) {
   SystraceSection s("Instance::callJSCallback");
+    MTR_SCOPE("Main", "Instance::callJSCallback");
   callback_->incrementPendingJSCalls();
   nativeToJsBridge_->invokeCallback((double)callbackId, std::move(params));
 }

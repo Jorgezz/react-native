@@ -11,6 +11,8 @@
 
 #include <memory>
 
+#include <base/MiniTrace.h>
+
 namespace facebook {
 namespace react {
 
@@ -38,12 +40,14 @@ RAMBundleRegistry::RAMBundleRegistry(
 void RAMBundleRegistry::registerBundle(
     uint32_t bundleId,
     std::string bundlePath) {
+    MTR_SCOPE("Main", "RAMBundleRegistry::registerBundle");
   m_bundlePaths.emplace(bundleId, std::move(bundlePath));
 }
 
 JSModulesUnbundle::Module RAMBundleRegistry::getModule(
     uint32_t bundleId,
     uint32_t moduleId) {
+    MTR_SCOPE("Main", "RAMBundleRegistry::getModule");
   if (m_bundles.find(bundleId) == m_bundles.end()) {
     if (!m_factory) {
       throw std::runtime_error(
